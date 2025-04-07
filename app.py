@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template_string, redirect
+from flask import Flask, request, render_template_string
 import os
 from datetime import datetime
 
@@ -7,29 +7,32 @@ app = Flask(__name__)
 # Set your password here
 PASSWORD = "9554216787"
 
-# HTML template for password form
-password_form = """
+# HTML form for username and password
+login_form = """
 <!DOCTYPE html>
 <html>
 <head><title>Login</title></head>
 <body>
-    <h2>Enter Password</h2>
+    <h2>Enter your details</h2>
     <form method="POST">
-        <input type="password" name="password" required>
+        <label>Username:</label>
+        <input type="text" name="username" required><br><br>
+        <label>Password:</label>
+        <input type="password" name="password" required><br><br>
         <input type="submit" value="Submit">
     </form>
 </body>
 </html>
 """
 
-# HTML template for success page
+# Success page showing the user's IP
 success_page = """
 <!DOCTYPE html>
 <html>
 <head><title>Welcome</title></head>
 <body>
     <h2>Access Granted</h2>
-    <p>Your IP has been logged. Thank you!</p>
+    <p>Your IP <strong>{{ ip }}</strong> has been logged as <strong>{{ user }}</strong>. Thank you!</p>
 </body>
 </html>
 """
@@ -37,19 +40,20 @@ success_page = """
 @app.route("/", methods=["GET", "POST"])
 def home():
     if request.method == "POST":
+        username = request.form.get("username")
         password = request.form.get("password")
         if password == PASSWORD:
-            # Get real client IP, accounting for proxy headers
+            # Get visitor's IP
             ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(",")[0].strip()
 
-            # Log IP with timestamp
+            # Save IP and username to file
             with open("ips.txt", "a") as f:
-                f.write(f"{datetime.now()} - {ip}\n")
+                f.write(f"{datetime.now()} - {ip} - {username}\n")
 
-            return render_template_string(success_page)
+            return render_template_string(success_page, ip=ip, user=username)
         else:
             return "Incorrect password", 403
-    return render_template_string(password_form)
+    return render_template_string(login_form)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
