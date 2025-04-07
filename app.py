@@ -1,67 +1,56 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, redirect
+import os
 from datetime import datetime
 
 app = Flask(__name__)
-password = "9554216787"
 
-# HTML content
-HTML = '''
+# Set your password here
+PASSWORD = "9554216787"
+
+# HTML template for password form
+password_form = """
 <!DOCTYPE html>
 <html>
-<head>
-  <title>Protected Page</title>
-</head>
+<head><title>Login</title></head>
 <body>
-  {% if error %}<p style="color:red;">{{ error }}</p>{% endif %}
-  {% if not authenticated %}
-    <form method="post">
-      <label>Password:</label>
-      <input type="password" name="password">
-      <input type="submit" value="Enter">
+    <h2>Enter Password</h2>
+    <form method="POST">
+        <input type="password" name="password" required>
+        <input type="submit" value="Submit">
     </form>
-  {% else %}
-    <h1>Welcome!</h1>
-    <p>Your IP has been logged.</p>
-    <h2>Logged IPs:</h2>
-    <pre>{{ logs }}</pre>
-  {% endif %}
 </body>
 </html>
-'''
+"""
 
-def get_real_ip():
-    if request.headers.getlist("X-Forwarded-For"):
-        ip = request.headers.getlist("X-Forwarded-For")[0].split(',')[0]
-    else:
-        ip = request.remote_addr
-    return ip
+# HTML template for success page
+success_page = """
+<!DOCTYPE html>
+<html>
+<head><title>Welcome</title></head>
+<body>
+    <h2>Access Granted</h2>
+    <p>Your IP has been logged. Thank you!</p>
+</body>
+</html>
+"""
 
-@app.before_request
-def log_ip():
-    ip = get_real_ip()
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open('ips.txt', 'a') as f:
-        f.write(f'{now} - {ip} (visited)\n')
+@app.route("/", methods=["GET", "POST"])
+def home():
+    if request.method == "POST":
+        password = request.form.get("password")
+        if password == PASSWORD:
+            # Get real client IP, accounting for proxy headers
+            ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(",")[0].strip()
 
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    error = None
-    authenticated = False
+            # Log IP with timestamp
+            with open("ips.txt", "a") as f:
+                f.write(f"{datetime.now()} - {ip}\n")
 
-    if request.method == 'POST':
-        if request.form.get('password') == password:
-            authenticated = True
+            return render_template_string(success_page)
         else:
-            error = "Incorrect password."
+            return "Incorrect password", 403
+    return render_template_string(password_form)
 
-    logs = ""
-    try:
-        with open('ips.txt', 'r') as f:
-            logs = f.read()
-    except FileNotFoundError:
-        logs = "No visitors yet."
-
-    return render_template_string(HTML, error=error, authenticated=authenticated, logs=logs)
-
-if __name__ == '__main__':
-    app.run(debug=True)
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=True, host="0.0.0.0", port=port)
