@@ -1,11 +1,11 @@
 from flask import Flask, request, render_template, redirect, url_for
+import os
 
 app = Flask(__name__)
 PASSWORD = "9554216787"
 IPS_FILE = "ips.txt"
 
 def get_client_ip():
-    # Check if running behind a proxy
     if "X-Forwarded-For" in request.headers:
         return request.headers["X-Forwarded-For"].split(',')[0].strip()
     return request.remote_addr
@@ -37,5 +37,7 @@ def login():
         return redirect(url_for("index"))
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=True, host="0.0.0.0", port=port)
+
 
