@@ -1,60 +1,82 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request, redirect, render_template_string, session
 import os
-from datetime import datetime
 
 app = Flask(__name__)
+app.secret_key = 'your_secret_key_here'
 
-# Set your password here
 PASSWORD = "9554216787"
+IPS_FILE = "ips.txt"
 
-# HTML form for username and password
-login_form = """
-<!DOCTYPE html>
-<html>
-<head><title>Login</title></head>
-<body>
-    <h2>Enter your details</h2>
-    <form method="POST">
-        <label>Username:</label>
-        <input type="text" name="username" required><br><br>
-        <label>Password:</label>
-        <input type="password" name="password" required><br><br>
-        <input type="submit" value="Submit">
-    </form>
-</body>
-</html>
-"""
+username_template = '''
+<!doctype html>
+<title>Enter Username</title>
+<h2>Enter your username</h2>
+<form method="POST">
+  <input type="text" name="username" required>
+  <input type="submit" value="Next">
+</form>
+'''
 
-# Success page showing the user's IP
-success_page = """
-<!DOCTYPE html>
-<html>
-<head><title>Welcome</title></head>
-<body>
-    <h2>Access Granted</h2>
-    <p>Your IP <strong>{{ ip }}</strong> has been logged as <strong>{{ user }}</strong>. Thank you!</p>
-</body>
-</html>
-"""
+password_template = '''
+<!doctype html>
+<title>Vault Login</title>
+<h2>Vault Authentication Required</h2>
+<form method="POST">
+  <input type="password" name="password" required>
+  <input type="submit" value="Enter">
+</form>
+'''
 
-@app.route("/", methods=["GET", "POST"])
-def home():
-    if request.method == "POST":
-        username = request.form.get("username")
-        password = request.form.get("password")
-        if password == PASSWORD:
-            # Get visitor's IP
-            ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(",")[0].strip()
+logged_in_template = '''
+<!doctype html>
+<title>Welcome</title>
+<h2>Access Granted</h2>
+<p>Your IP has been logged!</p>
+<pre>{{ ips }}</pre>
+'''
 
-            # Save IP and username to file
-            with open("ips.txt", "a") as f:
-                f.write(f"{datetime.now()} - {ip} - {username}\n")
+def get_client_ip():
+    return request.headers.get('X-Forwarded-For', request.remote_addr)
 
-            return render_template_string(success_page, ip=ip, user=username)
-        else:
-            return "Incorrect password", 403
-    return render_template_string(login_form)
+def log_ip(ip, username):
+    existing = {}
+    if os.path.exists(IPS_FILE):
+        with open(IPS_FILE, 'r') as f:
+            for line in f:
+                parts = line.strip().split(" - ")
+                if len(parts) == 2:
+                    existing[parts[0]] = parts[1]
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(debug=True, host="0.0.0.0", port=port)
+    if ip not in existing:
+        existing[ip] = username
+        with open(IPS_FILE, 'a') as f:
+            f.write(f"{ip} - {username}\n")
+
+def read_ips():
+    if os.path.exists(IPS_FILE):
+        with open(IPS_FILE, 'r') as f:
+            return f.read()
+    return "No IPs logged yet."
+
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    if 'username' not in session:
+        if request.method == 'POST':
+            session['username'] = request.form['username']
+            return redirect('/')
+        return render_template_string(username_template)
+
+    if 'authenticated' not in session:
+        if request.method == 'POST':
+            password = request.form['password']
+            if password == PASSWORD:
+                session['authenticated'] = True
+                ip = get_client_ip()
+                log_ip(ip, session['username'])
+                return redirect('/')
+        return render_template_string(password_template)
+
+    return render_template_string(logged_in_template, ips=read_ips())
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0')
