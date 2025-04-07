@@ -1,15 +1,25 @@
-from flask import Flask, request, render_template
+from flask import Flask, request, render_template, redirect, url_for
 
 app = Flask(__name__)
-ip_list = []
 PASSWORD = "9554216787"
+IPS_FILE = "ips.txt"
 
 def get_client_ip():
-    if request.headers.get('X-Forwarded-For'):
-        ip = request.headers.get('X-Forwarded-For').split(',')[0]
-    else:
-        ip = request.remote_addr
-    return ip
+    # Check if running behind a proxy
+    if "X-Forwarded-For" in request.headers:
+        return request.headers["X-Forwarded-For"].split(',')[0].strip()
+    return request.remote_addr
+
+def log_ip(ip):
+    with open(IPS_FILE, "a") as f:
+        f.write(ip + "\n")
+
+def read_logged_ips():
+    try:
+        with open(IPS_FILE, "r") as f:
+            return list(set(line.strip() for line in f if line.strip()))
+    except FileNotFoundError:
+        return []
 
 @app.route("/", methods=["GET"])
 def index():
@@ -20,12 +30,12 @@ def login():
     password = request.form.get("password")
     if password == PASSWORD:
         ip = get_client_ip()
-        if ip not in ip_list:
-            ip_list.append(ip)
-        return render_template("dashboard.html", ips=ip_list)
+        log_ip(ip)
+        ips = read_logged_ips()
+        return render_template("dashboard.html", ips=ips)
     else:
-        return "Incorrect password", 403
+        return redirect(url_for("index"))
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(debug=True)
 
